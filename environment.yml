@@ -1,0 +1,4 @@
+name: monitor-and-merge-files
+dependencies:
+  - python=3.9
+  - natsort

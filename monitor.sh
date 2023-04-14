@@ -41,6 +41,42 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+function prepare_conda {
+    # Preparing conda environment for python executions.
+    # Setting env_name
+    env_name="monitor-and-merge-files"
+    # Conda init
+    shell_name=$(basename "$SHELL")
+    conda init "$shell_name"
+    # Check if enviornment already exists
+    env_exists=$(conda env list | grep -wq "$env_name" && echo true || echo false)
+    # Check if environment exists and create if not
+    if [ "$env_exists" == false ]; then
+        echo "Creating new conda enviornment: $env_name"
+        conda env create -f environment.yml
+    fi
+    # Update conda environment in case any changes
+    conda env update -f environment.yml
+    # Activate conda environment
+    source ~/miniconda3/etc/profile.d/conda.sh
+    conda activate $env_name
+}
+
+prepare_conda
+
+# Function to call for merging files
+function merge_files {
+  # Check if the required arguments were provided
+  if [ "$#" -lt 3 ]; then
+    echo "Error: please provide a folder path, target file, and file pattern as arguments."
+    echo "Usage: merge_files [folder_path] [target_file] [file_pattern]"
+    return 1
+  fi
+
+  # Call the Python script with the provided arguments
+  python merge_files.py "$1" "$2" "$3"
+}
+
 # Check if the folder list file was specified
 if [ -z "$folder_list_file" ]; then
     echo "Error: no folder list file specified."
@@ -57,6 +93,9 @@ function cleanup {
     pkill -P $$
     # Remove any monitor files that were created
     rm -f /tmp/monitor_*
+    # Deactivate conda environment
+    conda deactivate
+    # Exit
     exit 0
 }
 
@@ -64,7 +103,12 @@ function cleanup {
 trap cleanup INT
 
 # Loop over each folder in the list and start monitoring with fswatch in the background
-for folder_to_observe in $folder_list; do
+for folder_line in $folder_list; do
+    # Split the line into its three parts
+    folder_to_observe=$(echo "$folder_line" | cut -d'|' -f1)
+    target_file=$(echo "$folder_line" | cut -d'|' -f2)
+    file_pattern=$(echo "$folder_line" | cut -d'|' -f3)
+
     echo "Monitoring folder $folder_to_observe"
 
     # Create temporary files for existing files in the folder if the -c option was specified
@@ -99,6 +143,8 @@ for folder_to_observe in $folder_list; do
                 # The file was just added
                 touch "$temp_file"
                 operation="added"
+                # Run the merge function in case of new file
+                python merge_files.py "$folder_to_observe" "$target_file" "$file_pattern" &
             else
                 # The file was modified
                 modification_time=$(stat -f "%m" "$changed_file")
