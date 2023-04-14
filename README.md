@@ -5,6 +5,7 @@
 
 ## Prerequisites
 - `Conda` installed (or `miniconda`)
+- `fswatch` installed
 
 ---
 
